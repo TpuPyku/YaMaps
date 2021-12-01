@@ -1,0 +1,23 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.filerecorder.nmeafilter.chain</ID>
+		<FriendlyName>File Recorder / Filter</FriendlyName>
+		<SortOrder>130</SortOrder>
+		<PlugIn>
+			<ID>com.franson.filerecorder</ID>
+			<FriendlyName>File Recorder</FriendlyName>
+			<ClassName>GatePlugInCE.FileRecorder</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>0</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>1</OutputEndPoint>
+		</PlugIn>
+		<PlugIn>
+			<ID>com.franson.nmeafilter</ID>
+			<FriendlyName>NMEA Filter</FriendlyName>
+			<ClassName>GatePlugInCE.NmeaFilterPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<OutputFilter>1</OutputFilter>
+		</PlugIn>
+	</Chain>
+</GpsGate>

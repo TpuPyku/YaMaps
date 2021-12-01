@@ -1,0 +1,19 @@
+ScrPath=SystemPath("ScriptPath")
+SplitPath=Split(ScrPath, "\")
+MainPathDir="\" \ SplitPath[2] \ SplitPath[3]
+
+While (ProcExists("Main.exe"))
+	GpsStat=IniRead(ScrPath\"..\Data\Settings.ini" ,"GPS", "Gps")
+	GpsOn = "True"
+	
+	If ( GpsStat eq GpsOn )
+		CallScript(MainPathDir\"Scripts\GPS.mscr")
+	EndIf
+	
+	If (not ProcExists("Downloader.exe"))
+		Run(MainPathDir\"Scripts\Downloader.exe")
+	EndIf
+	
+	Sleep 50000
+EndWhile
+

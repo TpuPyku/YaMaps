@@ -1,0 +1,18 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.comport.output.chain</ID>
+		<FriendlyName>COM Port</FriendlyName>
+		<RetryConnect>1</RetryConnect>
+		<CloseInputOnHibernate>1</CloseInputOnHibernate>
+		<SortOrder>230</SortOrder>
+		<PlugIn>
+			<ID>com.franson.comport</ID>
+			<FriendlyName>COM port</FriendlyName>
+			<ClassName>GatePlugInCE.ComPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>0</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>1</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

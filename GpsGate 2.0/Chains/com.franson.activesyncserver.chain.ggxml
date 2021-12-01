@@ -1,0 +1,17 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.activesyncserver.chain</ID>
+		<FriendlyName>ActiveSync</FriendlyName>
+		<RetryConnect>0</RetryConnect>
+		<SortOrder>200</SortOrder>
+		<PlugIn>
+			<ID>com.franson.activesyncserver</ID>
+			<FriendlyName>ActiveSync</FriendlyName>
+			<ClassName>GatePlugInCE.ActiveSyncServerPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>1</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>1</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

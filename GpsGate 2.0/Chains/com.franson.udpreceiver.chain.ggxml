@@ -1,0 +1,18 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.udpreceiver.chain</ID>
+		<FriendlyName>UDP Receiver</FriendlyName>
+		<RetryConnect>1</RetryConnect>
+		<CloseInputOnHibernate>1</CloseInputOnHibernate>
+		<SortOrder>190</SortOrder>
+		<PlugIn>
+			<ID>com.franson.udpreceiver</ID>
+			<FriendlyName>UDP Receiver</FriendlyName>
+			<ClassName>GatePlugInCE.UdpReceiverPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>1</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>0</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

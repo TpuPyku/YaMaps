@@ -1,0 +1,60 @@
+MainPathDir=SystemPath("ScriptPath")
+SplitPath=Split(MainPathDir, "\")
+SdPath="\" \ SplitPath[2]
+PyPathDir="\" \ SplitPath[2] \ "\Python25"
+PyPath="\" \ SplitPath[2] \ "\Python25\python.exe"
+
+# Install Python
+PyInstall=RegKeyExists("HKLM", "\Software\Python25\PythonCore\2.5\InstallPath")
+If (PyInstall eq False)
+	XCopy(PyPathDir\"\Windows\*", "\Windows", True, False)
+	XCopy(PyPathDir\"\library\*", SdPath\"\library", False, False)
+	
+	RegWriteString("HKCR", ".cab", "", "cabfile")
+	RegWriteString("HKCR", "cabfile", "", "CAB File")
+	RegWriteString("HKCR", "\cabfile\DefaultIcon", "", "\Windows\wceload.exe,-101")
+	RegWriteString('HKCR', '\cabfile\Shell\Open\Command', '', '"\Windows\wceload.exe \"%1\"')
+	
+	RegWriteString("HKLM", "\Software\Python25\PythonCore\2.5\InstallPath", "MajorVersion", PyPathDir)
+	RegWriteString("HKCR", ".py", "", "Python.File")
+	RegWriteString("HKCR", ".pyc", "", "Python.File.Compiled")
+	RegWriteString("HKCR", ".pyw", "", "Python.File.NoShell")
+	RegWriteString('HKCR', '\Python.File\Shell\Open\Command', '', '"'&PyPath&'" "%1"')
+	RegWriteString('HKCR', '\Python.File.Compiled\Shell\Open\Command', '', '"'&PyPath&'" "%1"')
+	RegWriteString('HKCR', '\Python.File.NoShell\Shell\Open\Command', '', '"'&PyPath&'" /nopcceshell "%1"')
+	RegWriteString("HKCR", "\Python.File\DefaultIcon", "", PyPath&",-104")
+	RegWriteString("HKCR", "\Python.File.Compiled\DefaultIcon", "", PyPath&",-105")
+	RegWriteString("HKCR", "\Python.File.NoShell\DefaultIcon", "", PyPath&",-106")
+EndIf
+
+# Install GpsGate and PortSplitter !\SDMMC\GpsGate 2.0!
+GGInstall=RegKeyExists("HKLM", "SOFTWARE\Franson\GpsGate")
+If (GGInstall eq False)
+	Run(MainPathDir\"\Tools\IRE.exe","/f:GpsGateInstall.reg")
+	GpsPath=SdPath\"GpsGate 2.0"
+	XCopy(GpsPath\"\Windows\*", "\Windows", True, False)
+Else
+	GpsPath=RegRead("HKLM", "\SOFTWARE\Franson\GpsGate", "InstallPath2")
+EndIf
+
+# Run app
+If (NOT ProcExists("Main.exe"))
+	Run(MainPathDir\"Main.exe")
+EndIf
+
+# Run GPS
+If(ProcExists("CityGuideCE.exe")) 
+	Kill("CityGuideCE.exe") 
+	Sleep (1000 )
+EndIf
+If(Not ProcExists("Port Splitter.exe")) 
+	Run(GpsPath\"Port Splitter.exe")
+EndIf
+If(Not ProcExists("GpsGateCE.EXE")) 
+	Run(GpsPath\"GpsGateCE.EXE")
+Endif
+
+# Timer for autoupdate trafic
+If (NOT ProcExists("Timer.exe"))
+	Run(MainPathDir\"Timer\Timer.exe")
+EndIf

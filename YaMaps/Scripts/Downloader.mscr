@@ -1,0 +1,43 @@
+ErrorLevel("off")
+
+ScrPath=SystemPath("ScriptPath")
+SplitPath=Split(ScrPath, "\")
+MainPathDir="\" \ SplitPath[2] \ SplitPath[3]
+PyPath="\" \ SplitPath[2] \ "Python25\python.exe"
+
+If (ProcExists("Python.exe"))
+	Exit
+EndIf
+
+URL=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "url")
+PT1=  IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lon")
+PT2=  IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lat")
+LABEL=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "label")
+Z=    IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+SIZE= IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "size")
+L=    IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "l")
+TRF=  IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "trf")
+Scale=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "scale")
+PARAM=('/1.x/?pt='&PT1&','&PT2&','&LABEL&'&z='&Z&'&size='&SIZE&'&scale='&Scale&'&l='&L&TRF)
+
+ImgPath=(MainPathDir\"\Images\map.png")
+Parametrs = ('"'&URL&'" "'&PARAM&'" "'&ImgPath&'"')
+If (ProcExists("Main.exe"))
+	Run(PyPath, ScrPath\'Downloader.pyw '&Parametrs)
+	Sleep 600
+	If (ProcExists('Python.exe'))
+		Minimize("Python CE")
+		While (ProcExists("Python.exe"))
+			Sleep 100
+		EndWhile
+	EndIf
+	If (NOT ProcExists("Timer.exe"))
+		Run(MainPathDir\"Timer\Timer.exe")
+	EndIf
+	UpdateTime=FileModifyTime(MainPathDir\"Images\map.png")
+	UpdateTimeF=FormatTime("d.m.y H:i:s", UpdateTime)
+	IniWrite(MainPathDir\"Data\Main.ini" , "UPDATE" , "Text", UpdateTimeF ,"unicode-prefix" )
+	Sleep 1000
+	PostMessage("YaMaps", HexToNumber("8001"), 0, 0 )
+EndIf
+

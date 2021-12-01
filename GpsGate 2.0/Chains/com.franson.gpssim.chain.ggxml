@@ -1,0 +1,13 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.gpssim.chain</ID>
+		<FriendlyName>GPS Simulator</FriendlyName>
+		<RetryConnect>2</RetryConnect>
+		<SortOrder>150</SortOrder>
+		<PlugIn>
+			<ID>com.franson.gpssim</ID>
+			<FriendlyName>GPS Simulator</FriendlyName>
+			<InputEndPoint>1</InputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

@@ -1,0 +1,14 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.gpslog.chain</ID>
+		<FriendlyName>NMEA Logger</FriendlyName>
+		<RetryConnect>2</RetryConnect>
+		<SortOrder>140</SortOrder>
+		<PlugIn>
+			<ID>com.franson.gpslog</ID>
+			<FriendlyName>NMEA Logger</FriendlyName>
+			<InputEndPoint>1</InputEndPoint>
+			<OutputEndPoint>0</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

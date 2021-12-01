@@ -1,0 +1,40 @@
+ScrPath=SystemPath("ScriptPath")
+SplitPath=Split(ScrPath, "\")
+MainPathDir="\" \ SplitPath[2] \ SplitPath[3]
+
+If ( argv[1] eq "plus" )
+	Bplus=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	BScale=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "scale")
+	If ( Bplus eq 19 )
+		Exit
+	EndIf
+	If ( BScale eq 1)
+		NewScale = "1.5"
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "scale", NewScale)
+	Else
+		NewZ=Bplus+1
+		NewScale = 1
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "scale", NewScale)
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "z", NewZ)
+	EndIf
+EndIf
+
+If ( argv[1] eq "minus" )
+	Bminus=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	BScale=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "scale")
+	If ( Bminus eq 1 )
+		Exit
+	EndIf
+	If ( BScale eq 1)
+		NewScale = "1.5"
+		NewZ=Bminus-1
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "scale", NewScale)
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "z", NewZ)
+	Else
+		NewScale=1
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "scale", NewScale)
+	EndIf
+EndIf
+
+Run(ScrPath\"Downloader.exe")
+

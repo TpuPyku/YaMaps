@@ -1,0 +1,17 @@
+<GpsGate>
+	<Chain>
+		<ID>com.gpsgate.input.chain</ID>
+		<FriendlyName>GpsGate.com (Receive)</FriendlyName>
+		<RetryConnect>1</RetryConnect>
+		<RetryInterval>60000</RetryInterval>
+		<CloseInputOnHibernate>1</CloseInputOnHibernate>
+		<PlugIn>
+			<ID>com.gpsgate.input</ID>
+			<FriendlyName>GpsGate.com Input</FriendlyName>
+			<ClassName>GateOnlinePlugInCE.OnlineInput</ClassName>
+			<InputEndPoint>1</InputEndPoint>
+			<CustomData name="ServerIP" type="string">online.gpsgate.com</CustomData>
+			<CustomData name="ServerPort" type="integer">30175</CustomData>
+		</PlugIn>
+	</Chain>
+</GpsGate>

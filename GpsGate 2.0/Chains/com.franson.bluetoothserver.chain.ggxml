@@ -1,0 +1,19 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.bluetoothserver.chain</ID>
+		<FriendlyName>Bluetooth Server</FriendlyName>
+		<CloseInputOnHibernate>1</CloseInputOnHibernate>
+		<RetryInterval>30000</RetryInterval>
+		<ResumeInterval>30000</ResumeInterval>
+		<SortOrder>190</SortOrder>
+		<PlugIn>
+			<ID>com.franson.bluetoothserver</ID>
+			<FriendlyName>Bluetooth Server</FriendlyName>
+			<ClassName>GatePlugInCE.BluetoothServerPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>0</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>1</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

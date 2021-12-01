@@ -1,0 +1,47 @@
+ScrPath=SystemPath("ScriptPath")
+SplitPath=Split(ScrPath, "\")
+MainPathDir="\" \ SplitPath[2] \ SplitPath[3]
+
+If ( argv[1] eq "left" )
+	Bleft=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lon")
+	Bz=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	NewPT1 = Bleft - 0.0035 * (2^(15 - Bz))
+	q = CompareFloat(NewPT1, -180.0000, 4)
+	If ( q eq -1 )
+		NewPT1 = NewPT1 + 360
+	EndIf
+	IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "lon", NewPT1)
+EndIf
+If ( argv[1] eq "right" )
+	Brigh=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lon")
+	Bz=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	NewPT1 = Brigh + 0.0035 * (2^(15 - Bz))
+	q = CompareFloat(NewPT1, 180.0000, 4)
+	If ( q eq 1)
+		NewPT1 = NewPT1 - 360
+	EndIf
+	IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "lon", NewPT1)
+EndIf
+If ( argv[1] eq "down" )
+	Bdown=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lat")
+	Bz=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	NewPT2 = Bdown - 0.0035 * (2^(15 - Bz))
+	q = CompareFloat(NewPT2, -180.0000, 4)
+	If ( q eq -1)
+		NewPT2 = NewPT2 + 360
+	EndIf
+	IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "lat", NewPT2)
+EndIf
+If ( argv[1] eq "up" )
+	Bup=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "lat")
+	Bz=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "z")
+	NewPT2 = Bup + 0.0035 * (2^(15 - Bz))
+	q = CompareFloat(NewPT2, 180.0000, 4)
+	If ( q eq 1)
+		NewPT2 = NewPT2 - 360
+	EndIf
+	IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "lat", NewPT2)
+EndIf
+
+Run(ScrPath\"Downloader.exe")
+

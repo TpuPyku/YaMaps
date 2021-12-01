@@ -1,0 +1,39 @@
+ScrPath=SystemPath("ScriptPath")
+SplitPath=Split(ScrPath, "\")
+MainPathDir="\" \ SplitPath[2] \ SplitPath[3]
+
+If ( argv[1] eq "trf" )
+	Btrf=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "trf")
+	TrfEnable  = ",trf,trfe"
+	TrfDisable = "&?"
+	If ( Btrf eq TrfEnable )
+		IniWrite(ScrPath\"..\Data\Main.ini" , "PROBKI" , "BitmapNormal", "..\Images\Btrf_off_N.png" ,"unicode-prefix" )
+		IniWrite(ScrPath\"..\Data\Main.ini" , "PROBKI" , "BitmapPushed", "..\Images\Btrf_off_P.png" ,"unicode-prefix" )
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "trf", TrfDisable)
+	EndIf
+	If ( Btrf eq TrfDisable )
+		IniWrite(ScrPath\"..\Data\Main.ini" , "PROBKI" , "BitmapNormal", "..\Images\Btrf_on_N.png" ,"unicode-prefix" )
+		IniWrite(ScrPath\"..\Data\Main.ini" , "PROBKI" , "BitmapPushed", "..\Images\Btrf_on_P.png" ,"unicode-prefix" )
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "trf", TrfEnable)
+	EndIf
+
+EndIf
+
+If ( argv[1] eq "layers" )
+	Blayers=IniRead(ScrPath\"..\Data\Settings.ini" ,"HOST", "l")
+	Map = "map"
+	Sat = "sat"
+	Msat= "sat,skl"
+	If ( Blayers eq Map )
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "l", Sat)
+	EndIf
+	If ( Blayers eq Sat)
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "l", Msat)
+	EndIf
+	If ( Blayers eq Msat)
+		IniWrite(ScrPath\"..\Data\Settings.ini", "HOST", "l", Map)
+	EndIf
+
+EndIf
+
+Run(ScrPath\"Downloader.exe")

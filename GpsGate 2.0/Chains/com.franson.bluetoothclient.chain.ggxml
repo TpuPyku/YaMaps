@@ -1,0 +1,20 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.bluetoothclient.chain</ID>
+		<FriendlyName>Bluetooth GPS</FriendlyName>
+		<RetryConnect>1</RetryConnect>
+		<RetryInterval>30000</RetryInterval>
+		<ResumeInterval>30000</ResumeInterval>
+		<CloseInputOnHibernate>1</CloseInputOnHibernate>
+		<SortOrder>110</SortOrder>
+		<PlugIn>
+			<ID>com.franson.bluetoothclient</ID>
+			<FriendlyName>Bluetooth GPS</FriendlyName>
+			<ClassName>GatePlugInCE.BluetoothClientPlugIn</ClassName>
+			<InputFilter>0</InputFilter>
+			<InputEndPoint>1</InputEndPoint>
+			<OutputFilter>0</OutputFilter>
+			<OutputEndPoint>0</OutputEndPoint>
+		</PlugIn>
+	</Chain>
+</GpsGate>

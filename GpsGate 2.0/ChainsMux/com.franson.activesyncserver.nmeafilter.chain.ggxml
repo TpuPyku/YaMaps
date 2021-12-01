@@ -1,0 +1,20 @@
+<GpsGate>
+	<Chain>
+		<ID>com.franson.activesyncserver.nmeafilter.chain</ID>
+		<FriendlyName>ActiveSync / Filter</FriendlyName>
+		<RetryConnect>1</RetryConnect>
+		<PlugIn>
+			<ID>com.franson.activesyncserver</ID>
+			<FriendlyName>ActiveSync</FriendlyName>
+			<ClassName>GatePlugInCE.ActiveSyncServerPlugIn</ClassName>
+			<InputEndPoint>1</InputEndPoint>
+		</PlugIn>
+		<PlugIn>
+			<ID>com.franson.nmeafilter</ID>
+			<FriendlyName>NMEA Filter</FriendlyName>
+			<ClassName>GatePlugInCE.NmeaFilterPlugIn</ClassName>
+			<InputFilter>1</InputFilter>
+			<OutputFilter>1</OutputFilter>
+		</PlugIn>		
+	</Chain>
+</GpsGate>
