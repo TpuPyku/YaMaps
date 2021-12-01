@@ -3,7 +3,7 @@
 Так как Яндекс Карты для WinCE померли, сделал из ~~грязи и палок~~ MortScript и Python приложение.
 Чисто для "посмотреть пробки". Основано на <a href="https://yandex.ru/dev/maps/staticapi/?from=mapsapi">StaticAPI</a> (По параметрам подгружает картинки с сервера, никакого кеширования и ведения по маршруту)
 
-[![Скриншот](https://GitHub.com/TpuPyku/YaMaps/YaMaps.jpg)
+![Скриншот](https://a.d-cd.net/EZjg1hW_TDggTagsTBEtMmeuz2o-960.jpg)
 
 ### Возможности:
 - Поддерживает отключение/включение пробок, переключение вида на спутник и гибрид.
