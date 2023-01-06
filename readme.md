@@ -33,6 +33,6 @@
 
 ### Ссылки:
 - Правила Яндекса https://yandex.ru/legal/maps_termsofuse/
-- GpsGate and Portsplitter https://gpsgate.com (версия для WinCe больше не распространяется)
+- GpsGate and Portsplitter https://gpsgate.com (версия для WinCe больше не распространяется) https://4pda.to/forum/index.php?showtopic=820802&st=2760#entry107172707 ;)
 - Python 2.5 for WindowsCE https://sourceforge.net/projects/pythonce/
 - MortScript http://www.sto-helit.de/index.php?module=page&entry=ms_overview&action=view&menu=29
