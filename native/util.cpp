@@ -110,6 +110,7 @@ void ConfigDefaults()
     g_cfg.autoReserve = 100;
     g_cfg.cacheMb = 500;
     g_cfg.cacheKb = -1;
+    g_cfg.cacheDays = 30;
     g_cfg.gpsEnabled = 1;
     wcscpy(g_cfg.gpsPort, L"COM6:");       // GPS receiver of Lada Vesta MMC
     g_cfg.gpsBaud = 115200;
@@ -149,11 +150,13 @@ static void ConfigSet(const char* key, const char* val)
     else if (!strcmp(key, "auto_reserve")) g_cfg.autoReserve = Clamp(atoi(val), 0, 100000);
     else if (!strcmp(key, "cache_mb"))     g_cfg.cacheMb = Clamp(atoi(val), 50, 30000);
     else if (!strcmp(key, "cache_kb"))     g_cfg.cacheKb = atoi(val);
+    else if (!strcmp(key, "cache_days"))   g_cfg.cacheDays = Clamp(atoi(val), 0, 3650);
     else if (!strcmp(key, "req_day"))      g_cfg.reqDay = atoi(val);
     else if (!strcmp(key, "req_count"))    g_cfg.reqCount = atoi(val);
     else if (!strcmp(key, "gps"))          g_cfg.gpsEnabled = atoi(val) != 0;
     else if (!strcmp(key, "gps_baud"))     g_cfg.gpsBaud = atoi(val);
     else if (!strcmp(key, "hide_taskbar")) g_cfg.hideTaskbar = atoi(val) != 0;
+    else if (!strcmp(key, "night"))        g_cfg.night = atoi(val) != 0;
     else if (!strcmp(key, "map_x"))        g_cfg.mapX = atoi(val);
     else if (!strcmp(key, "map_y"))        g_cfg.mapY = atoi(val);
     else if (!strcmp(key, "map_w"))        g_cfg.mapW = Clamp(atoi(val), 100, 650);
@@ -218,6 +221,8 @@ void ConfigSave()
         "layer=%s\r\n"
         "traffic=%d\r\n"
         "follow=%d\r\n"
+        "; dark map (button with the moon)\r\n"
+        "night=%d\r\n"
         "; minutes a traffic map stays fresh (auto refresh period)\r\n"
         "traffic_ttl=%d\r\n"
         "; max requests per day; Yandex blocks keys that regularly exceed the limit\r\n"
@@ -228,6 +233,8 @@ void ConfigSave()
         "cache_mb=%d\r\n"
         "; Cache folder size now, KB (-1 = recount)\r\n"
         "cache_kb=%ld\r\n"
+        "; maps without traffic older than this are downloaded again, days (0 = never)\r\n"
+        "cache_days=%d\r\n"
         "; request counter (date from GPS)\r\n"
         "req_day=%d\r\n"
         "req_count=%d\r\n"
@@ -242,8 +249,8 @@ void ConfigSave()
         "map_w=%d\r\n"
         "map_h=%d\r\n",
         g_cfg.host, g_cfg.lon, g_cfg.lat, g_cfg.z, kLayerNames[g_cfg.layer],
-        g_cfg.traffic, g_cfg.follow, g_cfg.trafficTtlMin, g_cfg.dailyLimit,
-        g_cfg.autoReserve, g_cfg.cacheMb, g_cfg.cacheKb, g_cfg.reqDay, g_cfg.reqCount,
+        g_cfg.traffic, g_cfg.follow, g_cfg.night, g_cfg.trafficTtlMin, g_cfg.dailyLimit,
+        g_cfg.autoReserve, g_cfg.cacheMb, g_cfg.cacheKb, g_cfg.cacheDays, g_cfg.reqDay, g_cfg.reqCount,
         g_cfg.gpsEnabled, port, g_cfg.gpsBaud, kill, g_cfg.hideTaskbar,
         g_cfg.mapX, g_cfg.mapY, g_cfg.mapW, g_cfg.mapH);
     if (n < 0)
@@ -292,6 +299,50 @@ void WorldToGeo(double x, double y, int z, double* lon, double* lat)
     }
     *lon = ln;
     *lat = phi * 180.0 / M_PI;
+}
+
+// ---------------------------------------------------------------- dates
+// The unit's clock is unreliable, so cache files get the GPS date as their write time
+// (StampFile) and their age is counted from it.
+
+static bool DayToFileTime(int yyyymmdd, FILETIME* ft)
+{
+    SYSTEMTIME t;
+    memset(&t, 0, sizeof(t));
+    t.wYear = (WORD)(yyyymmdd / 10000);
+    t.wMonth = (WORD)(yyyymmdd / 100 % 100);
+    t.wDay = (WORD)(yyyymmdd % 100);
+    t.wHour = 12;
+    return SystemTimeToFileTime(&t, ft) != 0;
+}
+
+void StampFile(HANDLE h, int yyyymmdd)
+{
+    FILETIME ft;
+    if (yyyymmdd && DayToFileTime(yyyymmdd, &ft))
+        SetFileTime(h, NULL, NULL, &ft);
+}
+
+int FileDay(const wchar_t* path)
+{
+    WIN32_FILE_ATTRIBUTE_DATA fa;
+    SYSTEMTIME t;
+    if (!GetFileAttributesEx(path, GetFileExInfoStandard, &fa) || !FileTimeToSystemTime(&fa.ftLastWriteTime, &t))
+        return 0;
+    return t.wYear * 10000 + t.wMonth * 100 + t.wDay;
+}
+
+int DaysBetween(int from, int to)
+{
+    FILETIME a, b;
+    if (!DayToFileTime(from, &a) || !DayToFileTime(to, &b))
+        return 0;
+    ULARGE_INTEGER ua, ub;
+    ua.LowPart = a.dwLowDateTime;
+    ua.HighPart = a.dwHighDateTime;
+    ub.LowPart = b.dwLowDateTime;
+    ub.HighPart = b.dwHighDateTime;
+    return (int)(((LONGLONG)ub.QuadPart - (LONGLONG)ua.QuadPart) / 864000000000LL);
 }
 
 // ---------------------------------------------------------------- processes

@@ -1,12 +1,7 @@
-GpsGate 2.0/
 native/obj/
-
-CLAUDE.md
-PROJECT.md
 
 YaMapsCE/Cache/
 YaMapsCE/*.log
 YaMapsCE/YaMapsCE.ini
 YaMapsCE/YaMapsPC.exe
 YaMapsCE/*.nmea
-build/

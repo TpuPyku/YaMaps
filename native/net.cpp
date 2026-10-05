@@ -206,6 +206,7 @@ static void SaveToCache(const MapRequest& r, const unsigned char* data, int len)
         return;
     DWORD w = 0;
     BOOL ok = WriteFile(h, data, len, &w, NULL) && (int)w == len;
+    StampFile(h, g_today);   // the age check (cache_days) counts from this date
     CloseHandle(h);
 
     int oldBytes = 0;

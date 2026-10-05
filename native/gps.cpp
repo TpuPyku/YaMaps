@@ -15,17 +15,25 @@ static volatile bool    s_scanReq;
 static wchar_t          s_port[16];
 static DWORD            s_baud;
 static DWORD            s_lastNotify;
+static volatile LONG    s_notifyPosted;  // WM_APP_GPS is in the window's queue, cleared by GpsGet
 
 static char             s_line[128];
 static int              s_lineLen;
 
+static const DWORD      kReadPauseMs = 50;   // let the driver collect a chunk instead of spinning on bytes
+
+// At most one message a second, and never a second one while the window hasn't read
+// the state yet: a busy window must not get a queue of them.
 static void Notify(bool force)
 {
     DWORD now = GetTickCount();
-    if (force || now - s_lastNotify >= 500) {
-        s_lastNotify = now;
-        PostMessage(s_notify, WM_APP_GPS, 0, 0);
-    }
+    if (!force && now - s_lastNotify < 1000)
+        return;
+    if (InterlockedExchange((LONG*)&s_notifyPosted, 1))
+        return;
+    s_lastNotify = now;
+    if (!PostMessage(s_notify, WM_APP_GPS, 0, 0))
+        s_notifyPosted = 0;
 }
 
 static int HexDigit(char c)
@@ -355,7 +363,7 @@ static DWORD WINAPI GpsThread(LPVOID)
 
         DWORD lastData = GetTickCount();
         while (!s_stop && !s_reopen && !s_scanReq) {
-            char buf[512];
+            char buf[2048];
             int got = ReadAvailable(h, buf, sizeof(buf), 1000);
             if (got < 0) {
                 Log("gps: read error (%lu)", GetLastError());
@@ -369,7 +377,11 @@ static DWORD WINAPI GpsThread(LPVOID)
                 continue;
             }
             lastData = GetTickCount();
+            EnterCriticalSection(&s_cs);
+            s_state.bytes += got;
+            LeaveCriticalSection(&s_cs);
             Feed(buf, got);
+            Sleep(kReadPauseMs);
         }
         CloseHandle(h);
         SetStatus(GPS_NO_PORT, port, baud);
@@ -436,4 +448,5 @@ void GpsGet(GpsState* s)
     EnterCriticalSection(&s_cs);
     *s = s_state;
     LeaveCriticalSection(&s_cs);
+    s_notifyPosted = 0;
 }

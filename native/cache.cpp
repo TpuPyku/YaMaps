@@ -230,6 +230,7 @@ CacheEntry* CacheAdd(const MapRequest& r, Image img, DWORD fetchTick)
     e->req = r;
     e->img = img;
     e->fetchTick = fetchTick;
+    e->fileDay = 0;
     e->useTick = GetTickCount();
     e->fallback = 0;
     return e;
@@ -250,7 +251,9 @@ CacheEntry* CacheFind(const MapRequest& r, bool loadFromDisk)
     Image img;
     if (!ImageFromFile(path, &img))
         return NULL;
-    return CacheAdd(r, img, 0);
+    CacheEntry* e = CacheAdd(r, img, 0);
+    e->fileDay = FileDay(path);
+    return e;
 }
 
 int CacheList(CacheEntry** out, int max)

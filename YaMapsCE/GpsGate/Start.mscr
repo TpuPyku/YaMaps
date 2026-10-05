@@ -1,9 +1,12 @@
 # Plan B: only if YaMapsCE cannot read the GPS port directly.
 # GpsGate copies NMEA from the shell's port to virtual COM7,
 # then in YaMapsCE settings choose COM7:.
+# Every step is written to Start.log next to this script.
 MainPathDir=SystemPath("ScriptPath")
 SplitPath=Split(MainPathDir, "\")
 SdPath="\" \ SplitPath[2]
+LogFile=MainPathDir\"Start.log"
+WriteFile(LogFile, FormatTime("H:i:s") & " start, script " & MainPathDir & "^NL^", True)
 
 # Registry and \Windows are reset on every boot of the unit,
 # so GpsGate and Port Splitter are registered again each time.
@@ -12,14 +15,17 @@ If (GGInstall eq False)
 	Run(MainPathDir\"\Tools\IRE.exe","/f:GpsGateInstall.reg")
 	GpsPath=SdPath\"GpsGate 2.0"
 	XCopy(GpsPath\"\Windows\*", "\Windows", True, False)
+	WriteFile(LogFile, FormatTime("H:i:s") & " registered GpsGate from " & GpsPath & "^NL^", True)
 Else
 	GpsPath=RegRead("HKLM", "\SOFTWARE\Franson\GpsGate", "InstallPath2")
+	WriteFile(LogFile, FormatTime("H:i:s") & " GpsGate already registered: " & GpsPath & "^NL^", True)
 EndIf
 
 # Navitel CityGuide holds the GPS port
 If (ProcExists("CityGuideCE.exe"))
 	Kill("CityGuideCE.exe")
 	Sleep(1000)
+	WriteFile(LogFile, FormatTime("H:i:s") & " closed CityGuideCE.exe^NL^", True)
 EndIf
 If (Not ProcExists("Port Splitter.exe"))
 	Run(GpsPath\"Port Splitter.exe")
@@ -27,5 +33,10 @@ EndIf
 If (Not ProcExists("GpsGateCE.EXE"))
 	Run(GpsPath\"GpsGateCE.EXE")
 EndIf
+WriteFile(LogFile, FormatTime("H:i:s") & " Port Splitter " & ProcExists("Port Splitter.exe") & ", GpsGate " & ProcExists("GpsGateCE.EXE") & "^NL^", True)
 
+# Let Port Splitter and GpsGate open the GPS port before YaMapsCE starts:
+# with gps_port=COM5: YaMapsCE would take the port first.
+Sleep(5000)
 Run(SdPath\"YaMapsCE\YaMapsCE.exe")
+WriteFile(LogFile, FormatTime("H:i:s") & " YaMapsCE started^NL^", True)

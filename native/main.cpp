@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------- UI layout
 // Button positions match the old SystemInformation layout (Main.ini), 800x480 screen.
 
-enum { B_SETTINGS, B_EXIT, B_TRF, B_LAYERS, B_GPS, B_LEFT, B_RIGHT, B_UP, B_DOWN, B_MINUS, B_PLUS, B_COUNT };
+enum { B_SETTINGS, B_NIGHT, B_EXIT, B_TRF, B_LAYERS, B_GPS, B_LEFT, B_RIGHT, B_UP, B_DOWN, B_MINUS, B_PLUS, B_COUNT };
 
 static const int kBtnSize = 50;
 
@@ -15,6 +15,7 @@ struct Button {
 
 static Button s_btn[B_COUNT] = {
     { 610,  28, { L"Bset" } },
+    { 675,  28, { L"Bnight_on", L"Bnight_off" } },
     { 740,  28, { L"Bexit" } },
     { 610,  93, { L"Btrf_on", L"Btrf_off" } },
     { 675,  93, { L"Blayers" } },
@@ -72,6 +73,9 @@ static void RingAdd(KeyRing& r, const MapRequest& k)
 static HWND       s_wnd;
 static HWND       s_taskbar;
 static HBITMAP    s_back;
+static Image      s_backImg;            // s_back as a 16bpp DIB: the night filter edits its pixels
+static unsigned short* s_backBits;
+static unsigned short* s_nightLut;      // RGB565 -> night color, only while night is on
 static int        s_cw, s_ch;
 static Image      s_bg;
 static HFONT      s_fontBig, s_fontSmall;
@@ -86,10 +90,15 @@ static KeyRing    s_missKeys;           // keys not found on disk
 static KeyRing    s_noFallbackKeys;     // keys with nothing cached around them
 static bool       s_userPending;        // user is still pressing buttons (TIMER_USER running)
 static double     s_heading;            // heading-up: map rotation, degrees
-static Image      s_canvas, s_rotated;  // heading-up buffers
-static unsigned char* s_canvasBits;
-static unsigned char* s_rotatedBits;
+static Image      s_canvas, s_rotated;  // heading-up buffers, exist only in that mode
+static unsigned short* s_canvasBits;
+static unsigned short* s_rotatedBits;
 static DWORD      s_lastSaveTick;
+static DWORD      s_lastPaintTick;
+static DWORD      s_statTick;           // once a minute: memory and load to the log
+static int        s_statPaints;
+static DWORD      s_statPaintMax, s_statGpsBytes;
+static int        s_statGpsLines, s_statGpsBad;
 
 static int        s_pressed = -1;
 static bool       s_pressedInside;
@@ -242,6 +251,8 @@ static int Today()
     return t.wYear * 10000 + t.wMonth * 100 + t.wDay;
 }
 
+volatile int g_today;
+
 static void CheckDay()
 {
     int d = Today();
@@ -257,6 +268,16 @@ static void CheckDay()
 
 enum { REQ_AUTO, REQ_USER, REQ_FORCE };
 
+// A map without traffic from the disk is refreshed once it is cache_days old. Files saved
+// while the date was unknown carry the unit's wrong clock (before 2024): refreshed too,
+// and get a real date then. Without today's date nothing expires.
+static bool IsExpired(const CacheEntry* e)
+{
+    if (!g_cfg.cacheDays || !g_today || !e->fileDay || e->fetchTick)
+        return false;
+    return e->fileDay < 20240101 || DaysBetween(e->fileDay, g_today) >= g_cfg.cacheDays;
+}
+
 static bool IsFresh(const CacheEntry* e)
 {
     if (!e)
@@ -264,7 +285,7 @@ static bool IsFresh(const CacheEntry* e)
     if (e->fallback)
         return false;
     if (!e->req.traffic)
-        return true;   // plain map/satellite never expires
+        return !IsExpired(e);
     return e->fetchTick && GetTickCount() - e->fetchTick < (DWORD)g_cfg.trafficTtlMin * 60000;
 }
 
@@ -368,26 +389,14 @@ static void BuildFallback(const MapRequest& k)
     if (!n)
         return;
 
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = REQ_W;
-    bi.bmiHeader.biHeight = REQ_H;
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 24;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits;
+    Image img;
+    if (!ImageCreate(REQ_W, REQ_H, &img))
+        return;
     HDC screen = GetDC(NULL);
-    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
     HDC dst = CreateCompatibleDC(screen);
     HDC src = CreateCompatibleDC(screen);
     ReleaseDC(NULL, screen);
-    if (!bmp) {
-        DeleteDC(dst);
-        DeleteDC(src);
-        return;
-    }
-    HGDIOBJ oldDst = SelectObject(dst, bmp);
+    HGDIOBJ oldDst = SelectObject(dst, img.bmp);
     RECT all = { 0, 0, REQ_W, REQ_H };
     HBRUSH bg = CreateSolidBrush(RGB(228, 226, 222));
     FillRect(dst, &all, bg);
@@ -416,7 +425,6 @@ static void BuildFallback(const MapRequest& k)
     DeleteDC(dst);
     DeleteDC(src);
 
-    Image img = { bmp, REQ_W, REQ_H };
     CacheEntry* e = CacheAdd(k, img, 0);
     e->fallback = 1;
     Log("fallback: z%d from %d cached images", k.z, drawn);
@@ -609,6 +617,15 @@ static void OnButton(int b)
             SettingsLoad();
         InvalidateRect(s_wnd, NULL, FALSE);
         return;
+    case B_NIGHT:
+        g_cfg.night = !g_cfg.night;
+        if (!g_cfg.night) {
+            free(s_nightLut);
+            s_nightLut = NULL;
+        }
+        ConfigSave();
+        InvalidateRect(s_wnd, NULL, FALSE);
+        return;
     case B_EXIT:   DestroyWindow(s_wnd); return;
     case B_TRF:    g_cfg.traffic = !g_cfg.traffic; break;
     case B_LAYERS: g_cfg.layer = (g_cfg.layer + 1) % LAYER_COUNT; break;
@@ -626,6 +643,7 @@ static void OnButton(int b)
 static int ButtonState(int b)
 {
     if (b == B_TRF) return g_cfg.traffic ? 0 : 1;
+    if (b == B_NIGHT) return g_cfg.night ? 0 : 1;
     if (b == B_GPS) return g_cfg.follow == FOLLOW_HEADING ? 0 : (g_cfg.follow == FOLLOW_NORTH ? 1 : 2);
     return 0;
 }
@@ -780,31 +798,19 @@ static int DrawMosaic(HDC dc, double cx, double cy, double vx, double vy, const 
             list[j] = list[j - 1];
             list[j - 1] = t;
         }
+    // every image of the view is here: the rest would be hidden under it, don't draw it
+    bool full = true;
+    for (int i = 0; i < nk && full; i++) {
+        CacheEntry* e = CacheFind(keys[i], false);
+        full = e && !e->fallback;
+    }
     int drawn = 0;
     for (int i = 0; i < n; i++)
         if (list[i]->req.layer == g_cfg.layer && abs(list[i]->req.z - g_cfg.z) <= 3 &&
+            (!full || DrawScore(list[i], keys, nk) == 10000) &&
             DrawEntry(dc, list[i], cx, cy, vx, vy, clip))
             drawn++;
     return drawn;
-}
-
-static unsigned char* MakeDib(int w, int h, Image* out)
-{
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = h;   // bottom-up
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 24;
-    bi.bmiHeader.biCompression = BI_RGB;
-    void* bits = NULL;
-    HDC screen = GetDC(NULL);
-    out->bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    ReleaseDC(NULL, screen);
-    out->w = w;
-    out->h = h;
-    return (unsigned char*)bits;
 }
 
 // Heading-up: turns the north-up canvas (view center in its middle) by -angle into the
@@ -812,7 +818,8 @@ static unsigned char* MakeDib(int w, int h, Image* out)
 static void RotateCanvas(double angle)
 {
     const int C = kCanvas, W = s_rotated.w, H = s_rotated.h;
-    const int cstride = (C * 3 + 3) & ~3, ostride = (W * 3 + 3) & ~3;
+    const int cstride = ((C * 2 + 3) & ~3) / 2, ostride = ((W * 2 + 3) & ~3) / 2;
+    const unsigned short bg = RGB565(228, 226, 222);
     double a = angle * M_PI / 180.0, ca = cos(a), sa = sin(a);
     long dx = (long)(ca * 65536), dy = (long)(sa * 65536);
     for (int y = 0; y < H; y++) {
@@ -820,18 +827,51 @@ static void RotateCanvas(double angle)
         double sx = -W / 2.0, sy = y - H / 2.0;
         long wx = (long)((sx * ca - sy * sa + C / 2.0) * 65536);
         long wy = (long)((sx * sa + sy * ca + C / 2.0) * 65536);
-        unsigned char* d = s_rotatedBits + (H - 1 - y) * ostride;
-        for (int x = 0; x < W; x++, d += 3, wx += dx, wy += dy) {
+        unsigned short* d = s_rotatedBits + (H - 1 - y) * ostride;
+        for (int x = 0; x < W; x++, wx += dx, wy += dy) {
             int px = (int)(wx >> 16), py = (int)(wy >> 16);
-            if (px < 0 || py < 0 || px >= C || py >= C) {
-                d[0] = 222; d[1] = 226; d[2] = 228;
-                continue;
-            }
-            const unsigned char* s = s_canvasBits + (C - 1 - py) * cstride + px * 3;
-            d[0] = s[0];
-            d[1] = s[1];
-            d[2] = s[2];
+            d[x] = (px < 0 || py < 0 || px >= C || py >= C) ? bg : s_canvasBits[(C - 1 - py) * cstride + px];
         }
+    }
+}
+
+// Night map: lightness inverted with hue and saturation kept (light background turns dark,
+// traffic stays green/yellow/red), then dimmed. One table lookup per pixel of the frame.
+static const int kNightDimPct = 80;
+
+static void NightMap(const RECT& r)
+{
+    if (!s_backBits)
+        return;
+    if (!s_nightLut) {
+        s_nightLut = (unsigned short*)malloc(65536 * sizeof(unsigned short));
+        if (!s_nightLut)
+            return;
+        for (int v = 0; v < 65536; v++) {
+            int c[3] = { ((v >> 8) & 0xF8) | (v >> 13), ((v >> 3) & 0xFC) | ((v >> 9) & 3),
+                         ((v << 3) & 0xF8) | ((v >> 2) & 7) };
+            int mx = c[0], mn = c[0];
+            for (int i = 1; i < 3; i++) {
+                if (c[i] > mx) mx = c[i];
+                if (c[i] < mn) mn = c[i];
+            }
+            int shift = 255 - mx - mn;   // HSL lightness L -> 255 - L
+            for (int i = 0; i < 3; i++) {
+                int t = c[i] + shift;
+                t = t < 0 ? 0 : t > 255 ? 255 : t;
+                c[i] = t * kNightDimPct / 100;
+            }
+            s_nightLut[v] = RGB565(c[0], c[1], c[2]);
+        }
+    }
+#ifndef UNDER_CE
+    GdiFlush();   // desktop GDI may batch drawing into the DIB
+#endif
+    int stride = ((s_cw * 2 + 3) & ~3) / 2;
+    for (int y = r.top; y < r.bottom; y++) {
+        unsigned short* p = s_backBits + (s_ch - 1 - y) * stride;
+        for (int x = r.left; x < r.right; x++)
+            p[x] = s_nightLut[p[x]];
     }
 }
 
@@ -850,7 +890,18 @@ static void DrawMap(HDC dc)
     double cy = g_cfg.mapY + g_cfg.mapH / 2.0;
     double angle = ViewAngle();
 
-    if (g_cfg.follow == FOLLOW_HEADING && s_canvasBits && s_rotatedBits) {
+    // rotation buffers (~1.7 MB) are kept only while heading-up is on
+    bool heading = g_cfg.follow == FOLLOW_HEADING;
+    if (heading && !s_canvasBits) {
+        s_canvasBits = ImageCreate(kCanvas, kCanvas, &s_canvas);
+        s_rotatedBits = ImageCreate(g_cfg.mapW, g_cfg.mapH, &s_rotated);
+    } else if (!heading && s_canvas.bmp) {
+        ImageFree(&s_canvas);
+        ImageFree(&s_rotated);
+        s_canvasBits = s_rotatedBits = NULL;
+    }
+
+    if (heading && s_canvasBits && s_rotatedBits) {
         HDC cdc = CreateCompatibleDC(dc);
         HGDIOBJ old = SelectObject(cdc, s_canvas.bmp);
         RECT all = { 0, 0, kCanvas, kCanvas };
@@ -869,6 +920,8 @@ static void DrawMap(HDC dc)
     }
     DeleteObject(bg);
 
+    if (g_cfg.night)
+        NightMap(mr);
     DrawGpsMarker(dc, cx, cy, vx, vy, angle);
 
     SelectClipRgn(dc, NULL);
@@ -1093,6 +1146,26 @@ static HFONT MakeFont(int height, int weight)
 
 // ---------------------------------------------------------------- window
 
+// Free memory of the unit and of this process, what was drawn and read since the last line.
+// A shrinking "proc" between lines with the same work is a leak.
+static void LogStat()
+{
+    MEMORYSTATUS ms;
+    memset(&ms, 0, sizeof(ms));
+    ms.dwLength = sizeof(ms);
+    GlobalMemoryStatus(&ms);
+    Log("stat: ram %lu%% used, %lu KB free, proc %lu KB free; paints %d (max %lu ms); "
+        "gps %lu bytes, %d lines, %d bad",
+        ms.dwMemoryLoad, ms.dwAvailPhys / 1024, ms.dwAvailVirtual / 1024, s_statPaints, s_statPaintMax,
+        s_gps.bytes - s_statGpsBytes, s_gps.lines - s_statGpsLines, s_gps.badLines - s_statGpsBad);
+    s_statTick = GetTickCount();
+    s_statPaints = 0;
+    s_statPaintMax = 0;
+    s_statGpsBytes = s_gps.bytes;
+    s_statGpsLines = s_gps.lines;
+    s_statGpsBad = s_gps.badLines;
+}
+
 static void OnCreate(HWND hwnd)
 {
     s_wnd = hwnd;
@@ -1100,15 +1173,17 @@ static void OnCreate(HWND hwnd)
     GetClientRect(hwnd, &rc);
     s_cw = rc.right;
     s_ch = rc.bottom;
-    HDC hdc = GetDC(hwnd);
-    s_back = CreateCompatibleBitmap(hdc, s_cw, s_ch);
-    ReleaseDC(hwnd, hdc);
+    s_backBits = ImageCreate(s_cw, s_ch, &s_backImg);
+    s_back = s_backImg.bmp;
+    if (!s_back) {   // still works, just without the night filter
+        HDC hdc = GetDC(hwnd);
+        s_back = CreateCompatibleBitmap(hdc, s_cw, s_ch);
+        ReleaseDC(hwnd, hdc);
+    }
 
     s_fontBig = MakeFont(22, FW_SEMIBOLD);
     s_fontSmall = MakeFont(15, FW_NORMAL);
     LoadImages();
-    s_canvasBits = MakeDib(kCanvas, kCanvas, &s_canvas);
-    s_rotatedBits = MakeDib(g_cfg.mapW, g_cfg.mapH, &s_rotated);
     CacheInit();
     SnapView();
 
@@ -1123,6 +1198,7 @@ static void OnCreate(HWND hwnd)
         EnsureGpsRunning();
     SetTimer(hwnd, TIMER_TICK, 1000, NULL);
     s_lastSaveTick = GetTickCount();
+    g_today = Today();
     Ensure(REQ_AUTO);
 }
 
@@ -1135,6 +1211,7 @@ static void OnDestroy(HWND hwnd)
         ShowWindow(s_taskbar, SW_SHOWNORMAL);
     GpsStop();
     NetStop();
+    LogStat();
     Log("exit, %d requests today", g_cfg.reqCount);
     PostQuitMessage(0);
 }
@@ -1156,8 +1233,13 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
     case WM_PAINT: {
         PAINTSTRUCT ps;
         HDC hdc = BeginPaint(hwnd, &ps);
+        DWORD t0 = GetTickCount();
         Paint(hdc);
         EndPaint(hwnd, &ps);
+        s_lastPaintTick = GetTickCount();
+        s_statPaints++;
+        if (s_lastPaintTick - t0 > s_statPaintMax)
+            s_statPaintMax = s_lastPaintTick - t0;
         return 0;
     }
 
@@ -1168,6 +1250,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
             Ensure(REQ_USER);
         } else {
             GpsGet(&s_gps);
+            g_today = Today();
             if (!s_dragging)
                 Ensure(REQ_AUTO);
             if (g_cfg.cacheKb > (LONG)g_cfg.cacheMb * 1024)
@@ -1177,6 +1260,11 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
                 ConfigSave();
                 s_lastSaveTick = GetTickCount();
             }
+            if (GetTickCount() - s_statTick >= 60000)
+                LogStat();
+            // the clock needs a frame a second; GPS updates may have drawn one already
+            if (GetTickCount() - s_lastPaintTick < 900)
+                return 0;
         }
         InvalidateRect(hwnd, NULL, FALSE);
         return 0;
@@ -1275,6 +1363,7 @@ static LRESULT CALLBACK WndProc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp)
         case 'L':         OnButton(B_LAYERS); break;
         case 'G':         OnButton(B_GPS); break;
         case 'S':         OnButton(B_SETTINGS); break;
+        case 'N':         OnButton(B_NIGHT); break;
         case VK_ESCAPE:   OnButton(B_EXIT); break;
         }
         return 0;

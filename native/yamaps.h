@@ -29,11 +29,13 @@ struct Config {
     int     layer;
     int     traffic;
     int     follow;         // keep view centered on GPS position
+    int     night;          // dark map: lightness inverted, dimmed
     int     trafficTtlMin;  // traffic image is considered fresh this long
     int     dailyLimit;     // hard cap of requests per day
     int     autoReserve;    // requests kept for manual actions (auto stops earlier)
     int     cacheMb;        // disk cache size limit
     volatile LONG cacheKb;  // disk cache size now (-1 = unknown, scan), kept in ini
+    int     cacheDays;      // maps without traffic older than this are downloaded again (0 = never)
     int     reqDay;         // yyyymmdd the counter belongs to
     int     reqCount;       // requests made on reqDay
     int     gpsEnabled;
@@ -46,6 +48,7 @@ struct Config {
 
 extern Config  g_cfg;
 extern wchar_t g_dir[MAX_PATH];   // exe directory, with trailing backslash
+extern volatile int g_today;      // yyyymmdd from GPS (or a sane clock), 0 = unknown
 
 // util.cpp
 void PathInDir(wchar_t* out, const wchar_t* name);
@@ -57,9 +60,14 @@ bool ConfigLoad();
 void ConfigSave();
 void GeoToWorld(double lon, double lat, int z, double* x, double* y);
 void WorldToGeo(double x, double y, int z, double* lon, double* lat);
+void StampFile(HANDLE h, int yyyymmdd);   // write time := that day (0: leave)
+int  FileDay(const wchar_t* path);        // yyyymmdd of the write time, 0 = unknown
+int  DaysBetween(int from, int to);       // yyyymmdd dates
 
 // image.cpp
 struct Image { HBITMAP bmp; int w, h; };
+#define RGB565(r, g, b) ((unsigned short)((((r) & 0xF8) << 8) | (((g) & 0xFC) << 3) | ((b) >> 3)))
+unsigned short* ImageCreate(int w, int h, Image* out);   // 16bpp RGB565, bottom-up
 bool ImageFromMemory(const unsigned char* data, int len, Image* out);
 bool ImageFromFile(const wchar_t* path, Image* out);
 void ImageFree(Image* im);
@@ -87,11 +95,12 @@ void  CachePath(wchar_t* out, const MapRequest& r);
 struct CacheEntry {
     MapRequest req;
     Image      img;
-    DWORD      fetchTick;   // GetTickCount() of download; 0 = loaded from disk, age unknown
+    DWORD      fetchTick;   // GetTickCount() of download; 0 = loaded from disk
+    int        fileDay;     // loaded from disk: yyyymmdd the file was saved, 0 = unknown
     DWORD      useTick;
     int        fallback;    // composed from other zoom levels, never fresh
 };
-enum { CACHE_MEM = 12 };     // a rotated view may need up to 9 images
+enum { CACHE_MEM = 8 };      // a rotated view needs up to 6 images, ~540 KB each
 void        CacheInit();
 void        CachePrune();                 // scan the disk, delete over g_cfg.cacheMb
 void        CacheCountSaved(int newBytes, int oldBytes);
@@ -116,6 +125,7 @@ struct GpsState {
     DWORD  fixTick;         // GetTickCount() of last valid fix
     DWORD  dataTick;        // GetTickCount() of last NMEA sentence
     int    date;            // yyyymmdd from RMC, 0 = unknown
+    DWORD  bytes;           // read from the port since start, for the log
 };
 void GpsStart(HWND notify);
 void GpsStop();

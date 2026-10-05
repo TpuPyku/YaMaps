@@ -11,7 +11,37 @@
 #define STBI_ASSERT(x) ((void)0)
 #include "stb_image.h"
 
-// Decodes PNG/JPEG into a 24bpp DIB section (the format every CE display driver can blit).
+// 16bpp RGB565 bottom-up DIB section: the unit's screen format, so blits need no
+// conversion, and a third less memory than 24bpp. Returns the pixels, NULL on failure.
+unsigned short* ImageCreate(int w, int h, Image* out)
+{
+    struct { BITMAPINFOHEADER h; DWORD masks[3]; } bi;
+    memset(&bi, 0, sizeof(bi));
+    bi.h.biSize = sizeof(BITMAPINFOHEADER);
+    bi.h.biWidth = w;
+    bi.h.biHeight = h;          // bottom-up
+    bi.h.biPlanes = 1;
+    bi.h.biBitCount = 16;
+    bi.h.biCompression = BI_BITFIELDS;
+    bi.masks[0] = 0xF800;
+    bi.masks[1] = 0x07E0;
+    bi.masks[2] = 0x001F;
+
+    void* bits = NULL;
+    HDC screen = GetDC(NULL);
+    out->bmp = CreateDIBSection(screen, (BITMAPINFO*)&bi, DIB_RGB_COLORS, &bits, NULL, 0);
+    ReleaseDC(NULL, screen);
+    if (!out->bmp || !bits) {
+        Log("image: CreateDIBSection %dx%d failed (%lu)", w, h, GetLastError());
+        ImageFree(out);
+        return NULL;
+    }
+    out->w = w;
+    out->h = h;
+    return (unsigned short*)bits;
+}
+
+// Decodes PNG/JPEG into a 16bpp DIB section (ImageCreate).
 bool ImageFromMemory(const unsigned char* data, int len, Image* out)
 {
     int w, h, comp;
@@ -21,42 +51,20 @@ bool ImageFromMemory(const unsigned char* data, int len, Image* out)
         return false;
     }
 
-    BITMAPINFO bi;
-    memset(&bi, 0, sizeof(bi));
-    bi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-    bi.bmiHeader.biWidth = w;
-    bi.bmiHeader.biHeight = h;          // bottom-up
-    bi.bmiHeader.biPlanes = 1;
-    bi.bmiHeader.biBitCount = 24;
-    bi.bmiHeader.biCompression = BI_RGB;
-
-    void* bits = NULL;
-    HDC screen = GetDC(NULL);
-    HBITMAP bmp = CreateDIBSection(screen, &bi, DIB_RGB_COLORS, &bits, NULL, 0);
-    ReleaseDC(NULL, screen);
-    if (!bmp || !bits) {
-        Log("image: CreateDIBSection %dx%d failed (%lu)", w, h, GetLastError());
+    unsigned short* bits = ImageCreate(w, h, out);
+    if (!bits) {
         stbi_image_free(rgb);
         return false;
     }
 
-    int stride = (w * 3 + 3) & ~3;
+    int stride = ((w * 2 + 3) & ~3) / 2;
     for (int y = 0; y < h; y++) {
         const unsigned char* src = rgb + y * w * 3;
-        unsigned char* dst = (unsigned char*)bits + (h - 1 - y) * stride;
-        for (int x = 0; x < w; x++) {
-            dst[0] = src[2];
-            dst[1] = src[1];
-            dst[2] = src[0];
-            src += 3;
-            dst += 3;
-        }
+        unsigned short* dst = bits + (h - 1 - y) * stride;
+        for (int x = 0; x < w; x++, src += 3)
+            dst[x] = RGB565(src[0], src[1], src[2]);
     }
     stbi_image_free(rgb);
-
-    out->bmp = bmp;
-    out->w = w;
-    out->h = h;
     return true;
 }
 
