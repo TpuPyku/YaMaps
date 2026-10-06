@@ -50,8 +50,12 @@ static bool WaitSocket(SOCKET s, bool write, int sec)
 
 // Plain HTTP/1.0 GET. Returns body in *body (malloc'ed). HTTP/1.0 + Connection: close
 // guarantees no chunked encoding and the server closes the socket at the end.
-static int HttpGet(const char* host, const char* path, unsigned char** body, int* bodyLen, int* status)
+// With ifNoneMatch the server may answer 304: NET_OK, *status = 304, no body.
+// The ETag of a 200 answer goes to etag (empty if none).
+static int HttpGet(const char* host, const char* path, const char* ifNoneMatch,
+                   unsigned char** body, int* bodyLen, int* status, char* etag, int etagCap)
 {
+    etag[0] = 0;
     *status = 0;
     if (!s_hostAddr) {
         hostent* he = gethostbyname(host);
@@ -89,10 +93,13 @@ static int HttpGet(const char* host, const char* path, unsigned char** body, int
     nb = 0;
     ioctlsocket(s, FIONBIO, &nb);
 
-    char req[512];
+    char cond[160] = "";
+    if (ifNoneMatch && ifNoneMatch[0])
+        _snprintf(cond, sizeof(cond), "If-None-Match: %s\r\n", ifNoneMatch);
+    char req[640];
     int reqLen = _snprintf(req, sizeof(req),
-        "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: YaMapsCE/1.0\r\nConnection: close\r\n\r\n",
-        path, host);
+        "GET %s HTTP/1.0\r\nHost: %s\r\nUser-Agent: YaMapsCE/1.0\r\n%sConnection: close\r\n\r\n",
+        path, host, cond);
     if (send(s, req, reqLen, 0) != reqLen) {
         closesocket(s);
         return NET_CONNECT;
@@ -155,6 +162,20 @@ static int HttpGet(const char* host, const char* path, unsigned char** body, int
         h += 2;
         if (_strnicmp(h, "Content-Length:", 15) == 0)
             contentLength = atoi(h + 15);
+        if (_strnicmp(h, "ETag:", 5) == 0) {
+            const char* v = h + 5;
+            while (*v == ' ')
+                v++;
+            int n = 0;
+            while (v[n] && v[n] != '\r' && n < etagCap - 1)
+                n++;
+            memcpy(etag, v, n);
+            etag[n] = 0;
+        }
+    }
+    if (*status == 304 && ifNoneMatch && ifNoneMatch[0]) {
+        free(buf);
+        return NET_OK;
     }
     if (*status != 200) {
         Log("net: HTTP %d: %.200s", *status, bodyStart);
@@ -188,8 +209,32 @@ void CachePath(wchar_t* out, const MapRequest& r)
     PathInDir(out, name);
 }
 
+// The server's ETag is kept at the end of the cache file: <etag><length byte>"ETAG".
+// Image decoders stop at the end of the image and ignore it.
+static const int kEtagCap = 100;
+
+static void ReadEtag(const wchar_t* path, char* etag)
+{
+    etag[0] = 0;
+    HANDLE h = CreateFile(path, GENERIC_READ, FILE_SHARE_READ, NULL, OPEN_EXISTING, 0, NULL);
+    if (h == INVALID_HANDLE_VALUE)
+        return;
+    unsigned char tail[kEtagCap + 5];
+    DWORD size = GetFileSize(h, NULL), got = 0;
+    DWORD want = size < sizeof(tail) ? size : sizeof(tail);
+    if (want >= 5 && SetFilePointer(h, -(LONG)want, NULL, FILE_END) != 0xFFFFFFFF &&
+        ReadFile(h, tail, want, &got, NULL) && got == want && !memcmp(tail + got - 4, "ETAG", 4)) {
+        int n = tail[got - 5];
+        if (n < kEtagCap && n <= (int)got - 5) {
+            memcpy(etag, tail + got - 5 - n, n);
+            etag[n] = 0;
+        }
+    }
+    CloseHandle(h);
+}
+
 // Raw response goes to the cache via a temp file, so a half-written file is never read.
-static void SaveToCache(const MapRequest& r, const unsigned char* data, int len)
+static void SaveToCache(const MapRequest& r, const unsigned char* data, int len, const char* etag)
 {
     wchar_t name[64], dir[MAX_PATH], path[MAX_PATH], tmp[MAX_PATH];
     _snwprintf(name, 64, L"Cache\\%d", r.z);
@@ -206,6 +251,15 @@ static void SaveToCache(const MapRequest& r, const unsigned char* data, int len)
         return;
     DWORD w = 0;
     BOOL ok = WriteFile(h, data, len, &w, NULL) && (int)w == len;
+    int n = (int)strlen(etag);
+    if (ok && n) {
+        unsigned char trailer[kEtagCap + 5];
+        memcpy(trailer, etag, n);
+        trailer[n] = (unsigned char)n;
+        memcpy(trailer + n + 1, "ETAG", 4);
+        ok = WriteFile(h, trailer, n + 5, &w, NULL) && (int)w == n + 5;
+        len += n + 5;
+    }
     StampFile(h, g_today);   // the age check (cache_days) counts from this date
     CloseHandle(h);
 
@@ -234,19 +288,34 @@ static void Fetch(const MapRequest& r, MapResult* res)
     _snprintf(path, sizeof(path), "/1.x/?ll=%.6f,%.6f&z=%d&size=%d,%d&l=%s%s&lang=ru_RU",
         lon, lat, r.z, REQ_W, REQ_H, kLayerParam[r.layer], r.traffic ? ",trf,trfe" : "");
 
+    // A cached copy (expired, or a tap on the map) is only checked: 304 = not changed.
+    wchar_t file[MAX_PATH];
+    CachePath(file, r);
+    char cachedTag[kEtagCap], etag[kEtagCap];
+    ReadEtag(file, cachedTag);
+
     DWORD t0 = GetTickCount();
     unsigned char* body = NULL;
     int bodyLen = 0;
-    res->err = HttpGet(g_cfg.host, path, &body, &bodyLen, &res->httpStatus);
-    if (res->err == NET_OK) {
+    res->err = HttpGet(g_cfg.host, path, cachedTag, &body, &bodyLen, &res->httpStatus, etag, kEtagCap);
+    if (res->err == NET_OK && res->httpStatus == 304) {
+        HANDLE h = CreateFile(file, GENERIC_WRITE, 0, NULL, OPEN_EXISTING, 0, NULL);
+        if (h != INVALID_HANDLE_VALUE) {
+            StampFile(h, g_today);   // fresh for another cache_days
+            CloseHandle(h);
+        }
+        if (!ImageFromFile(file, &res->img))
+            res->err = NET_DECODE;
+    } else if (res->err == NET_OK) {
         res->bytes = bodyLen;
         if (ImageFromMemory(body, bodyLen, &res->img))
-            SaveToCache(r, body, bodyLen);
+            SaveToCache(r, body, bodyLen, etag);
         else
             res->err = NET_DECODE;
         free(body);
     }
-    Log("net: %s -> %d (%d bytes, %lu ms)", path, res->err, res->bytes, GetTickCount() - t0);
+    Log("net: %s -> %d (HTTP %d, %d bytes, %lu ms)", path, res->err, res->httpStatus, res->bytes,
+        GetTickCount() - t0);
 }
 
 static DWORD WINAPI NetThread(LPVOID)

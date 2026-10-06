@@ -268,7 +268,8 @@ static void CheckDay()
 
 enum { REQ_AUTO, REQ_USER, REQ_FORCE };
 
-// A map without traffic from the disk is refreshed once it is cache_days old. Files saved
+// A map without traffic from the disk is refreshed once it is cache_days old (net.cpp asks
+// with If-None-Match, so an unchanged map costs a request but no download). Files saved
 // while the date was unknown carry the unit's wrong clock (before 2024): refreshed too,
 // and get a real date then. Without today's date nothing expires.
 static bool IsExpired(const CacheEntry* e)
