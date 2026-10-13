@@ -31,8 +31,8 @@ static Button s_btn[B_COUNT] = {
 static const wchar_t* kWeekDays[7] = { L"Вс", L"Пн", L"Вт", L"Ср", L"Чт", L"Пт", L"Сб" };
 static const wchar_t* kLayerTitle[LAYER_COUNT] = { L"схема", L"спутник", L"гибрид" };
 
-static const COLORREF kText    = RGB(255, 255, 255);
-static const COLORREF kTextDim = RGB(170, 170, 170);
+static const COLORREF kText    = RGB(0xf3, 0xf1, 0xec);   // VestaHome palette (skin: make_images.py)
+static const COLORREF kTextDim = RGB(0xa3, 0xa8, 0xb0);
 static const COLORREF kTextErr = RGB(255, 120, 120);
 
 enum { TIMER_TICK = 1, TIMER_USER = 2 };
@@ -718,7 +718,7 @@ static void DrawGpsMarker(HDC dc, double cx, double cy, double vx, double vy, do
     int py = (int)floor(cy - dx * rs + dy * rc + 0.5);
 
     bool fresh = s_gps.valid && GetTickCount() - s_gps.fixTick < 5000;
-    HBRUSH brush = CreateSolidBrush(fresh ? RGB(0x20, 0x60, 0xE0) : RGB(140, 140, 140));
+    HBRUSH brush = CreateSolidBrush(fresh ? RGB(0xff, 0x6b, 0x1a) : RGB(140, 140, 140));   // VestaHome accent
     HPEN pen = CreatePen(PS_SOLID, 2, RGB(255, 255, 255));
     HGDIOBJ ob = SelectObject(dc, brush);
     HGDIOBJ op = SelectObject(dc, pen);
@@ -932,20 +932,23 @@ static void DrawMap(HDC dc)
 // White rounded button like the image buttons.
 static void DrawCtl(HDC dc, const RECT& r, bool pressed, HFONT font, const wchar_t* caption)
 {
-    HBRUSH brush = CreateSolidBrush(pressed ? RGB(190, 190, 190) : RGB(255, 255, 255));
+    // VestaHome style: a dark tile with a 2 px border; pressed = orange fill, dark caption
+    HBRUSH brush = CreateSolidBrush(pressed ? RGB(0xff, 0x6b, 0x1a) : RGB(0x22, 0x25, 0x2a));
+    HPEN pen = CreatePen(PS_SOLID, 2, pressed ? RGB(0xff, 0x6b, 0x1a) : RGB(0x34, 0x38, 0x3f));
     HGDIOBJ ob = SelectObject(dc, brush);
-    HGDIOBJ op = SelectObject(dc, GetStockObject(NULL_PEN));
-    RoundRect(dc, r.left, r.top, r.right, r.bottom, 14, 14);
+    HGDIOBJ op = SelectObject(dc, pen);
+    RoundRect(dc, r.left, r.top, r.right, r.bottom, 20, 20);
     SelectObject(dc, op);
     SelectObject(dc, ob);
+    DeleteObject(pen);
     DeleteObject(brush);
-    Text(dc, font, RGB(90, 90, 90), r.left, r.top, r.right, r.bottom, DT_CENTER, caption);
+    Text(dc, font, pressed ? RGB(0x0b, 0x0c, 0x0e) : kText, r.left, r.top, r.right, r.bottom, DT_CENTER, caption);
 }
 
 static void DrawSettings(HDC dc)
 {
     RECT mr = { g_cfg.mapX, g_cfg.mapY, g_cfg.mapX + g_cfg.mapW, g_cfg.mapY + g_cfg.mapH };
-    HBRUSH bg = CreateSolidBrush(RGB(32, 36, 44));
+    HBRUSH bg = CreateSolidBrush(RGB(0x17, 0x19, 0x1c));
     FillRect(dc, &mr, bg);
     DeleteObject(bg);
 
@@ -1385,7 +1388,9 @@ int WINAPI wWinMain(HINSTANCE inst, HINSTANCE, LPWSTR, int)
 
     // single instance: bring the running copy to front
     HWND prev = FindWindow(APP_CLASS, NULL);
-    if (prev) {
+    if (prev) {   // it may be behind another window or at the bottom (OSMapsCE's "home"): to the top
+        ShowWindow(prev, SW_SHOW);
+        SetWindowPos(prev, HWND_TOP, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_SHOWWINDOW);
         SetForegroundWindow(prev);
         return 0;
     }
