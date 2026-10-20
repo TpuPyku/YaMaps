@@ -17,6 +17,7 @@ static MapRequest       s_pending;
 static bool             s_hasPending;
 static DWORD            s_seq;
 static unsigned long    s_hostAddr;     // cached host address, network order
+static bool             s_hostFresh;    // false: look the host up again (s_hostAddr is the fallback)
 
 static const char* kLayerParam[LAYER_COUNT] = { "map", "sat", "sat,skl" };
 
@@ -57,13 +58,18 @@ static int HttpGet(const char* host, const char* path, const char* ifNoneMatch,
 {
     etag[0] = 0;
     *status = 0;
-    if (!s_hostAddr) {
+    // The phone's DNS often fails (11001 after 1.5-11 s): when a lookup fails, the last address is used.
+    if (!s_hostFresh) {
         hostent* he = gethostbyname(host);
-        if (!he) {
+        if (he) {
+            memcpy(&s_hostAddr, he->h_addr_list[0], 4);
+            s_hostFresh = true;
+        } else if (s_hostAddr) {
+            Log("net: gethostbyname(%s) failed (%d), using the last address", host, WSAGetLastError());
+        } else {
             Log("net: gethostbyname(%s) failed (%d)", host, WSAGetLastError());
             return NET_DNS;
         }
-        memcpy(&s_hostAddr, he->h_addr_list[0], 4);
     }
 
     SOCKET s = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
@@ -81,13 +87,13 @@ static int HttpGet(const char* host, const char* path, const char* ifNoneMatch,
     if (connect(s, (sockaddr*)&sa, sizeof(sa)) != 0 && WSAGetLastError() != WSAEWOULDBLOCK) {
         Log("net: connect failed (%d)", WSAGetLastError());
         closesocket(s);
-        s_hostAddr = 0;
+        s_hostFresh = false;
         return NET_CONNECT;
     }
     if (!WaitSocket(s, true, kConnectTimeoutSec)) {
         Log("net: connect timeout");
         closesocket(s);
-        s_hostAddr = 0;
+        s_hostFresh = false;
         return NET_CONNECT;
     }
     nb = 0;

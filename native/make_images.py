@@ -87,10 +87,23 @@ def sign(d, name, c, bg):
     elif name == 'night':                     # crescent
         d.ellipse([13 * K, 13 * K, 37 * K, 37 * K], fill=c)
         d.ellipse([20 * K, 8 * K, 42 * K, 30 * K], fill=bg)
-    elif name == 'trf':                       # traffic light
-        d.rounded_rectangle([17 * K, 10 * K, 33 * K, 40 * K], radius=6 * K, outline=c, width=int(2.8 * K))
-        for y in (17, 25, 33):
-            d.ellipse([22 * K, (y - 3) * K, 28 * K, (y + 3) * K], fill=c)
+    elif name == 'trf':                       # traffic: two cars one behind the other, seen from the front
+        def car(cx, top, s, cover):           # a car's front: windscreen on the body, lights, wheels
+            body = [(cx - 13 * s, top + 8 * s), (cx + 13 * s, top + 8 * s), (cx + 13 * s, top + 17 * s),
+                    (cx - 13 * s, top + 17 * s)]
+            roof = [(cx - 13 * s, top + 8 * s), (cx - 9 * s, top), (cx + 9 * s, top), (cx + 13 * s, top + 8 * s)]
+            if cover:                         # the front car hides the one behind it
+                d.polygon(P(*(roof + body[2:])), fill=bg)
+                d.rectangle([(cx - 15 * s) * K, (top + 17 * s) * K, (cx + 15 * s) * K, (top + 21 * s) * K], fill=bg)
+            line(d, c, roof, 2.6 * s)
+            line(d, c, body + [body[0]], 2.6 * s)
+            for x in (cx - 8 * s, cx + 8 * s):
+                r = 2.1 * s
+                d.ellipse([(x - r) * K, (top + 12.5 * s - r) * K, (x + r) * K, (top + 12.5 * s + r) * K], fill=c)
+            for x in (cx - 10 * s, cx + 10 * s):
+                bar(d, c, x - 1.6 * s, top + 19.5 * s, x + 1.6 * s, top + 19.5 * s, 2.6 * s)
+        car(31, 9, 0.72, False)
+        car(21, 20, 1.0, True)
     elif name == 'layers':                    # two stacked sheets
         for dy, fill in ((6, False), (0, True)):
             q = [(25, 12 + dy), (38, 20 + dy), (25, 28 + dy), (12, 20 + dy)]
